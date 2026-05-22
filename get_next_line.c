@@ -3,79 +3,142 @@
 /*                                                        :::      ::::::::   */
 /*   get_next_line.c                                    :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: dnakamot <dnakamot@student.42.fr>          +#+  +:+       +#+        */
+/*   By: dnakamot <dnakamot@student.42.tokyo.jp>          +#+  +:+      
+	+#+        */
 /*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/05/13 20:30:13 by dnakamot          #+#    #+#             */
-/*   Updated: 2026/05/19 11:09:22 by dnakamot         ###   ########.fr       */
+/*   Created: 2026/05/22 01:44:31 by dnakamot          #+#    #+#             */
+/*   Updated: 2026/05/22 02:19:45 by dnakamot         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "get_next_line.h"
 
-int	ft_getchar(int fd)
+static char	*append_buf(char **line, char *buf, int n)
 {
-	char	c;
-	int		ret;
+	size_t	old_len;
+	char	*new_line;
 
-	ret = read(fd, &c, 1);
-	if (ret <= 0)
-		return (EOF);
-	return ((unsigned char)c);
+	old_len = ft_strlen(*line);
+	new_line = ft_realloc(*line, old_len + 1, old_len + n + 1);
+	if (!new_line)
+	{
+		free(*line);
+		*line = NULL;
+		return (NULL);
+	}
+	*line = new_line;
+	ft_memcpy(*line + old_len, buf, n + 1);
+	return (*line);
+}
+
+static int	fill_line(int fd, char **line)
+{
+	char	*buf;
+	int		n;
+
+	buf = malloc(BUFFER_SIZE + 1);
+	if (!buf)
+		return (-1);
+	n = 0;
+	while (!ft_strchr(*line, '\n'))
+	{
+		n = read(fd, buf, BUFFER_SIZE);
+		if (n <= 0)
+			break ;
+		buf[n] = '\0';
+		if (!append_buf(line, buf, n))
+		{
+			free(buf);
+			return (-1);
+		}
+	}
+	free(buf);
+	return (n);
+}
+
+static char	*ret_line(t_gnl *g)
+{
+	size_t	len;
+
+	if (g->nl)
+		len = (size_t)(g->nl - g->line + 1);
+	else
+		len = ft_strlen(g->line);
+	g->ret = malloc(len + 1);
+	if (!g->ret)
+		return (NULL);
+	ft_memcpy(g->ret, g->line, len);
+	g->ret[len] = '\0';
+	return (g->ret);
+}
+
+static void	save_nextline(t_gnl *g)
+{
+	char	*remainder;
+
+	if (g->nl && *(g->nl + 1) != '\0')
+	{
+		remainder = ft_strdup(g->nl + 1);
+		free(g->line);
+		g->line = remainder;
+	}
+	else
+	{
+		free(g->line);
+		g->line = NULL;
+	}
 }
 
 char	*get_next_line(int fd)
 {
-	char	*line;
-	char	*new_line;
-	int		c;
-	int		len;
-	int		i;
+	static t_gnl	g;
+	int				n;
 
-	line = malloc(1);
-	if (!line)
+	if (fd < 0 || BUFFER_SIZE <= 0)
 		return (NULL);
-	line[0] = '\0';
-	len = 0;
-	while ((c = ft_getchar(fd)) != EOF)
+	n = fill_line(fd, &g.line);
+	if (n < 0 || !g.line || !g.line[0])
 	{
-		printf("line=%s\n", line);
-		new_line = malloc(len + 2);
-		if (!new_line)
-			return (NULL);
-		i = 0;
-		while (i < len)
-		{
-			printf("ループ(i=%d:len=%d)\n", i, len);
-			new_line[i] = line[i];
-			i++;
-		}
-		new_line[len] = (char)c;
-		new_line[len + 1] = '\0';
-		printf("new_line%s\n", new_line);
-		free(line);
-		line = new_line;
-		len++;
-		if (c == '\n')
-			break ;
-	}
-	printf("ループから出た");
-	if (len == 0 && c == EOF)
-	{
-		free(line);
+		free(g.line);
+		g.line = NULL;
 		return (NULL);
 	}
-	return (line);
+	g.nl = ft_strchr(g.line, '\n');
+	if (!ret_line(&g) && g.line)
+	{
+		free(g.line);
+		g.line = NULL;
+		return (NULL);
+	}
+	save_nextline(&g);
+	return (g.ret);
 }
 
-int	main(void)
-{
-	int fd;
-	char *bufp;
-	fd = open("text.txt", O_RDONLY);
-	bufp = get_next_line(fd);
-	printf("%s", bufp);
-	bufp = get_next_line(fd);
-	printf("%s", bufp);
-	close(fd);
-	return (0);
-}
+// int	main(void)
+// {
+// 	int fd;
+// 	char *bufp;
+
+// printf("--- 標準入力テスト (何か文字を入力してEnterを押してください) ---\n");
+
+// bufp = get_next_line(0);
+// printf("GNLが返した行: %s", bufp);
+// free(bufp);
+
+// printf("\n");
+
+// 	printf("--- ファイル読み込みテスト ---\n");
+// 	fd = open("text.txt", O_RDONLY);
+// 	if (fd < 0)
+// 	{
+// 		printf("エラー: text.txt が開けませんでした。\n");
+// 		return (1);
+// 	}
+// 	while ((bufp = get_next_line(fd)) != NULL)
+// 	{
+// 		printf("%s", bufp);
+// 		free(bufp);
+// 	}
+// 	close(fd);
+// 	return (0);
+// }
